@@ -1,42 +1,60 @@
+# Base image
 FROM ubuntu:22.04
 
-# Set environment variable to avoid tzdata prompt
+# Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install necessary packages
+# Install essential dependencies
+# - clang, lld, llvm: Required compilers and linkers
+# - git, wget, make: Build tools
+# - python3, python3-pip: Required by OpenOrbis scripts
+# - vim, nano: Text editors
+# - socat: generic utility often used in payload deployment
 RUN apt-get update && apt-get install -y \
     build-essential \
-    git \
-    wget \
-    cmake \
     binutils \
-    netcat \
     clang \
     llvm \
-    lld \
-    lldb \
-    clang-tidy \
-    clang-tools \
-    cppcheck \
-    libprotobuf-c-dev \
-    libprotobuf-c1 \
-    protobuf-c-compiler \
-    protobuf-compiler
+    git \
+    wget \
+    curl \
+    make \
+    cmake \
+    python3 \
+    python3-pip \
+    vim \
+    nano \
+    sudo \
+    unzip \
+    libelf-dev \
+    && rm -rf /var/lib/apt/lists/*
 
+RUN wget https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.3/toolchain-llvm-14.zip -O /tmp/toolchain-llvm-14.zip && \
+    unzip /tmp/toolchain-llvm-14.zip -d /tmp/oo && \
+    tar -xvf /tmp/oo/toolchain-llvm-14.tar.gz -C /opt && \
+    rm -rf /tmp/toolchain-llvm-14.zip /tmp/oo
 
-# Fetch the OpenOrbis toolchain and extract it
-RUN wget -O /tmp/OpenOrbis.tar.gz https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.2/v0.5.2.tar.gz
-RUN tar -xvf /tmp/OpenOrbis.tar.gz -C /opt
+# Clean up
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+	
+# Create a user for development
+ARG USERNAME=ps4dev
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
 
-# # Fetch protobuf-c repo, build and install it
-# RUN git clone https://github.com/protobuf-c/protobuf-c.git /tmp/protobuf-c
-# RUN cd /tmp/protobuf-c && ./autogen.sh && ./configure && make && make install
+RUN groupadd --gid $USER_GID $USERNAME \
+    && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
+    && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
+    && chmod 0440 /etc/sudoers.d/$USERNAME
+
+USER $USERNAME
+WORKDIR /home/$USERNAME/workspace
 
 # Set environment variables
 ENV OO_PS4_TOOLCHAIN=/opt/OpenOrbis
 
-# Clean up
-RUN apt-get clean && rm -rf /var/lib/apt/lists/* && rm /tmp/OpenOrbis.tar.gz
-
 # Set bash vi-mode
 RUN echo 'set -o vi' >> ~/.bashrc
+
+# Default command
+CMD ["/bin/bash"]
